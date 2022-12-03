@@ -1,9 +1,10 @@
 const fetch = require('node-fetch');
 const puppeteer = require('puppeteer-core');
 const fs = require('fs');
-const {deleteEventOccurances, getEventsTitles} = './icalutils/ical.js';
+const User = require('../models/UserModel');
+const {deleteEventOccurances, getEventsTitles} = require('../icalutils/ical');
 
-const filterIds = [
+/*const filterIds = [
   '0;118,78,77,51;0;0;',
   '0;18;0;0;',
   '0;70;0;0;'
@@ -18,7 +19,7 @@ const subjects = [
   'Statistika (VB, BF), P',
   'Statistika (VB, BF), SV',
   'Statistika (VB, BF), LV'
-];
+];*/
 
 const browser_path = process.env.NODE_ENV === 'production' ? process.env.PROD_BROWSER_PATH : process.env.DEV_BROWSER_PATH;
 if (!browser_path) {
@@ -69,17 +70,17 @@ function setupDownloadHook(page, cookies) {
   });
 }
 
-async function fetchCalendar(filterId) {
+async function fetchCalendar(url) {
   const browser = await puppeteer.launch({executablePath: browser_path, headless: true, args: ['--no-sandbox']
 });
   try {
     const page = await browser.newPage();
-    await page.goto(`https://www.wise-tt.com/wtt_up_famnit/index.jsp?filterId=${filterId}`);
+    await page.goto(url);
   
     await page.setRequestInterception(true);
     const cookies = await page.cookies();
     const download = setupDownloadHook(page, cookies);
-    const titles = await getTitles(page, filterId);
+    const titles = await getTitles(page, url.split('=')[1]);
 
     await clickExport(page);
     let data = await download;
@@ -99,11 +100,11 @@ async function fetchCalendar(filterId) {
   }
 }
 
-const fetchAll = async (filterIds) => {
+const fetchAll = async (urls) => {
   const calendars = [];
-  console.log(filterIds);
-  await Promise.all(filterIds.map(async (filterId) => {
-    let cal = await fetchCalendar(filterId);
+  console.log("called");
+  Promise.all(urls.map(async (url) => {
+    let cal = await fetchCalendar(url);
     calendars.push(cal);
   }))
   return calendars;
@@ -127,8 +128,8 @@ const formatCalendars = (calendars) => {
   return output;
 }
 
-const getIcal = async (filterIds) => {
-  const calendars = await fetchAll(filterIds);
+const getIcal = async (urls, subjects) => {
+  const calendars = await fetchAll(urls);
   const formatted = formatCalendars(calendars);
   const filtered = deleteEventOccurances(formatted, subjects);
   return filtered;
@@ -148,11 +149,16 @@ const saveTxt = (text) => {
   })
 }
 
+
+// API functions
 const getCalendar = async (req, res) => {
+  const user = await User.findById(req.user.id);
+  const urls = user.calendar_urls;
+  const subjects = user.subjects;
   res.set('content-type', 'text/plain');
 
   try {
-    const data = await getIcal(filterIds);
+    const data = await getIcal(urls, subjects);
     res.send(data);
   } catch(e) {
     console.log(e);
