@@ -1,0 +1,3 @@
+[ ] optimize calendar fetching
+[x] popravi getEventTitles
+[ ] backend code refactoring
