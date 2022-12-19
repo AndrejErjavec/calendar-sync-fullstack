@@ -4,29 +4,12 @@ const fs = require('fs');
 const User = require('../models/UserModel');
 const {deleteEventOccurances, getEventsTitles} = require('../icalutils/ical');
 
-/*const filterIds = [
-  '0;118,78,77,51;0;0;',
-  '0;18;0;0;',
-  '0;70;0;0;'
-];
-
-const subjects = [
-  'Kriptografija in računalniška varnost EN (izbirni)',
-  'Programsko inženirstvo',
-  'Oblikovanje večpredstavnostnih vsebin (izbirni)',
-  'Seminar - zaključna projektna naloga (RIN)',
-  'Geografski informacijski sistemi EN (Izbirni), P',
-  'Statistika (VB, BF), P',
-  'Statistika (VB, BF), SV',
-  'Statistika (VB, BF), LV'
-];*/
-
 const browser_path = process.env.NODE_ENV === 'production' ? process.env.PROD_BROWSER_PATH : process.env.DEV_BROWSER_PATH;
 if (!browser_path) {
   throw new Error("Path to the browser must be specified");
 }
 
-/*async function getTitles(page, filterId) {
+async function getTitles(page, filterId) {
   const subjectFilter = filterId.split(';', 4).pop();
   if (subjectFilter !== '0') {
     const ids = subjectFilter.split(',');
@@ -35,7 +18,7 @@ if (!browser_path) {
     }, ids);
   }
   return null;
-}*/
+}
 
 async function clickExport(page) {
   await page.evaluate(() => {
@@ -93,7 +76,6 @@ async function fetchCalendar(url) {
 
     const position = data.indexOf('BEGIN:VEVENT');
     data = data.substr(0, position) + 'X-WR-TIMEZONE:Europe/Ljubljana\n' + data.substr(position);
-
     return data;
   } finally {
     await browser.close();
@@ -101,10 +83,9 @@ async function fetchCalendar(url) {
 }
 
 const fetchAll = async (urls) => {
-  const calendars = [];
-  console.log("called");
-  Promise.all(urls.map(async (url) => {
-    let cal = await fetchCalendar(url);
+  let calendars = [];
+  await Promise.all(urls.map(async (url) => {
+    const cal = await fetchCalendar(url);
     calendars.push(cal);
   }))
   return calendars;
@@ -135,30 +116,25 @@ const getIcal = async (urls, subjects) => {
   return filtered;
 }
 
-const getTitles = async (filterIds) => {
-  const calendars = await fetchAll(filterIds);
-  const formatted = formatCalendars(calendars);
-  const eventTitles = getEventsTitles(formatted);
-  return eventTitles;
-}
 
 const saveTxt = (text) => {
   fs.writeFile('calendars.txt', text, err => {
     if (err) console.log(err);
     return;
-  })
+  });
 }
 
 
-// API functions
+// ========== API functions ==========
+
 const getCalendar = async (req, res) => {
   const user = await User.findById(req.user.id);
-  const urls = user.calendar_urls;
+  const calendars = user.calendar_urls;
   const subjects = user.subjects;
   res.set('content-type', 'text/plain');
 
   try {
-    const data = await getIcal(urls, subjects);
+    const data = await getIcal(calendars, subjects);
     res.send(data);
   } catch(e) {
     console.log(e);
@@ -166,10 +142,13 @@ const getCalendar = async (req, res) => {
   }
 }
 
-const getEventTitles = async (req, res) => {
+const getSubjects = async (req, res) => {
   try {
-    const data = await getEventsTitles(filterIds);
-    res.send(data);
+    const user = await User.findById(req.user.id);
+    const calendars = await fetchAll(user.calendar_urls);
+    const formatted = formatCalendars(calendars);
+    const subjects = getEventsTitles(formatted);
+    res.send(subjects);
   } catch(e) {
     console.log(e);
     res.sendStatus(404);
@@ -178,5 +157,5 @@ const getEventTitles = async (req, res) => {
 
 module.exports = {
   getCalendar,
-  getEventTitles
+  getSubjects
 }

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const {getCalendar, getEventTitles} = require('../controllers/calendarController');
+const {getCalendar, getSubjects} = require('../controllers/calendarController');
 const {protect} = require('../middleware/authMiddleware');
 
 router.get('/up', (req, res) => { 
@@ -9,6 +9,6 @@ router.get('/up', (req, res) => {
 });
 
 router.get('/', protect, getCalendar);
-router.get('/events', protect, getEventTitles);
+router.get('/subjects', protect, getSubjects);
 
 module.exports = router;

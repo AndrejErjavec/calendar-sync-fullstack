@@ -18,6 +18,7 @@ const addCalendarUrl = async (req, res) => {
   if (!url) {
     return errorHandler({req, res, status: 400, err: "URL not specified"});
   }
+  // TODO: get only calendars not whole user
   const user = await User.findById(req.user.id);
   if (user.calendar_urls.includes(url)) {
     return errorHandler({req, res, status: 400, err: "URL already added"});

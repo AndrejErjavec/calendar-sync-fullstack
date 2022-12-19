@@ -4,7 +4,6 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 require('dotenv').config();
 const connectDB = require('./config/db');
-const {getCalendar, getEventTitles} = require('./controllers/calendarController');
 
 connectDB();
 
