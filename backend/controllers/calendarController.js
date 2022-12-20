@@ -1,138 +1,12 @@
-const fetch = require('node-fetch');
-const puppeteer = require('puppeteer-core');
-const fs = require('fs');
+const errorHandler = require('../middleware/errorMiddleware');
 const User = require('../models/UserModel');
-const {deleteEventOccurances, getEventsTitles} = require('../icalutils/ical');
-
-const browser_path = process.env.NODE_ENV === 'production' ? process.env.PROD_BROWSER_PATH : process.env.DEV_BROWSER_PATH;
-if (!browser_path) {
-  throw new Error("Path to the browser must be specified");
-}
-
-async function getTitles(page, filterId) {
-  const subjectFilter = filterId.split(';', 4).pop();
-  if (subjectFilter !== '0') {
-    const ids = subjectFilter.split(',');
-    return await page.evaluate((ids) => {
-      return ids.map(id => document.querySelector(`tr[data-rk="${id}"]`).querySelector('span').innerHTML);
-    }, ids);
-  }
-  return null;
-}
-
-async function clickExport(page) {
-  await page.evaluate(() => {
-    const node = document.querySelector('a[title="Izvoz celotnega urnika v ICS formatu  "]');
-    if (node == null) {
-      throw 'Export button not found';
-    }
-    const handler = node.getAttributeNode('onclick').nodeValue;
-    node.setAttribute('onclick', handler.replace('_blank', '_self'));
-    node.click();
-  });
-}
-
-function setupDownloadHook(page, cookies) {
-  return new Promise(resolve => {
-    page.on('request', async request => {
-      // console.log(request.url());
-
-      if (request.url() === 'https://www.wise-tt.com/wtt_up_famnit/TextViewer') {
-        const response = await fetch(request.url(), {
-          headers: {
-            ...request.headers(),
-            'cookie': cookies.map(cookie => `${cookie.name}=${cookie.value}`).join(';'),
-          }
-        });
-        const data = await response.text();
-        resolve(data);
-      } else {
-        request.continue(); // Redirect 302
-      }
-    });
-  });
-}
-
-async function fetchCalendar(url) {
-  const browser = await puppeteer.launch({executablePath: browser_path, headless: true, args: ['--no-sandbox']
-});
-  try {
-    const page = await browser.newPage();
-    await page.goto(url);
-  
-    await page.setRequestInterception(true);
-    const cookies = await page.cookies();
-    const download = setupDownloadHook(page, cookies);
-    const titles = await getTitles(page, url.split('=')[1]);
-
-    await clickExport(page);
-    let data = await download;
-
-    if (titles != null) {
-      data = data.replace(/\s*BEGIN:VEVENT[\s\S]*?END:VEVENT\s*/g, event => {
-        return titles.some(title => event.includes(`SUMMARY:${title}`)) ? event : '';
-      });
-    }
-
-    const position = data.indexOf('BEGIN:VEVENT');
-    data = data.substr(0, position) + 'X-WR-TIMEZONE:Europe/Ljubljana\n' + data.substr(position);
-    return data;
-  } finally {
-    await browser.close();
-  }
-}
-
-const fetchAll = async (urls) => {
-  let calendars = [];
-  await Promise.all(urls.map(async (url) => {
-    const cal = await fetchCalendar(url);
-    calendars.push(cal);
-  }))
-  return calendars;
-}
-
-const formatCalendars = (calendars) => {
-  let output = "";
-  for (let i = 0; i < calendars.length; i++) {
-    if (i != 0) {
-      // calendars[i] = calendars[i].replace('BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:WISE TIMETABLE\nX-WR-TIMEZONE:Europe/Ljubljana', '');
-      calendars[i] = calendars[i].replace('BEGIN:VCALENDAR', '');
-      calendars[i] = calendars[i].replace('VERSION:2.0', '');
-      calendars[i] = calendars[i].replace('PRODID:WISE TIMETABLE', '');
-      calendars[i] = calendars[i].replace('X-WR-TIMEZONE:Europe/Ljubljana', '');
-    }
-    if (i != calendars.length - 1) {
-      calendars[i] = calendars[i].replace('END:VCALENDAR', '');
-    }
-    output += calendars[i];
-  }
-  return output;
-}
-
-const getIcal = async (urls, subjects) => {
-  const calendars = await fetchAll(urls);
-  const formatted = formatCalendars(calendars);
-  const filtered = deleteEventOccurances(formatted, subjects);
-  return filtered;
-}
-
-
-const saveTxt = (text) => {
-  fs.writeFile('calendars.txt', text, err => {
-    if (err) console.log(err);
-    return;
-  });
-}
-
-
-// ========== API functions ==========
+const {getIcal, getSubjectsFromICal} = require('../scraper/calendarScraper');
 
 const getCalendar = async (req, res) => {
   const user = await User.findById(req.user.id);
   const calendars = user.calendar_urls;
   const subjects = user.subjects;
   res.set('content-type', 'text/plain');
-
   try {
     const data = await getIcal(calendars, subjects);
     res.send(data);
@@ -145,9 +19,8 @@ const getCalendar = async (req, res) => {
 const getSubjects = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    const calendars = await fetchAll(user.calendar_urls);
-    const formatted = formatCalendars(calendars);
-    const subjects = getEventsTitles(formatted);
+    const urls = await fetchAll(user.calendar_urls);
+    const subjects = await getSubjectsFromICal(urls);
     res.send(subjects);
   } catch(e) {
     console.log(e);
@@ -155,7 +28,88 @@ const getSubjects = async (req, res) => {
   }
 }
 
+const getUserCalendars = async (req, res) => {
+  const calendars = await User.findById(req.user.id).select('calendar_urls');
+  res.status(200).json(calendars);
+}
+
+
+const getUserSubjects = async (req, res) => { 
+  const subjects = await User.findById(req.user.id).select('subjects');
+  res.status(200).json(subjects);
+}
+
+
+const addCalendarUrl = async (req, res) => {
+  const {url} = req.body;
+  if (!url) {
+    return errorHandler({req, res, status: 400, err: "URL not specified"});
+  }
+  // TODO: get only calendars not whole user
+  const user = await User.findById(req.user.id);
+  if (user.calendar_urls.includes(url)) {
+    return errorHandler({req, res, status: 400, err: "URL already added"});
+  }
+
+  const newUrl = await User.updateOne({_id: req.user.id}, {$push: {calendar_urls: url}});
+  if(!newUrl) {
+    return errorHandler({req, res, status: 400, err: "Failed to add new calendar URL"});
+  }
+  res.status(200).json(user);
+}
+
+
+const addSubject = async (req, res) => {
+  const {subject} = req.body;
+  if (!subject) {
+    return errorHandler({req, res, status: 400, err: "Subject not specified"});
+  }
+
+  const user = await User.findById(req.user.id);
+  if (user.subjects.includes(subject)) {
+    return errorHandler({req, res, status: 400, err: "Subject already added"});
+  }
+
+  const newSubject = await User.updateOne({_id: req.user.id}, {$push: {subjects: subject}});
+  if (!newSubject) {
+    return errorHandler({req, res, status: 400, err: "Failed to add subject"});
+  }
+  res.status(200).json(subject);
+}
+
+
+const removeCalendarUrl = async (req, res) => {
+  const url = req.params.url;
+
+  const user = await User.findById(req.user.id);
+  if (!user.calendar_urls.includes(url)) {
+    return errorHandler({req, res, status: 400, err: "URL not found"});
+  }
+  
+  await User.findOneAndUpdate({_id: req.user.id}, {$pull: {calendar_urls: url}});
+  res.status(200).json(url);
+}
+
+
+const removeSubject = async (req, res) => {
+  const subject = req.params.subject;
+
+  const user = await User.findById(req.user.id);
+  if (!user.subjects.includes(subject)) {
+    return errorHandler({req, res, status: 400, err: "Subject not found"});
+  }
+  
+  await User.findOneAndUpdate({_id: req.user.id}, {$pull: {subjects: subject}});
+  res.status(200).json(subject);
+}
+
 module.exports = {
   getCalendar,
-  getSubjects
+  getSubjects,
+  getUserSubjects,
+  getUserCalendars,
+  addSubject,
+  addCalendarUrl,
+  removeCalendarUrl,
+  removeSubject
 }

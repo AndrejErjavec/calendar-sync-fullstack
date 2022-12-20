@@ -18,11 +18,9 @@ app.use(cors({origin: '*'}));
 
 const authRoutes = require('./routes/authRoutes'); 
 const calendarRoutes = require('./routes/calendarRoutes');
-const userRoutes = require('./routes/userRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/calendar', calendarRoutes);
-app.use('/api/user', userRoutes);
 
 app.listen(port, (err) => {
   if (err) console.log(err);
