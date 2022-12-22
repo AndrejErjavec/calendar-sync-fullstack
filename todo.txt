@@ -1,3 +1,4 @@
 [ ] optimize calendar fetching
+[ ] subject alphabetical sorting
 [x] popravi getEventTitles
-[ ] backend code refactoring
+[x] backend code refactoring

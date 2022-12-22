@@ -27,10 +27,10 @@ const getEventsTitles = (ical) => {
          * ^ (start of line anchor) is added to the beginning of the regex so only the first match on each line is captured. T
          * his may or may not be required, depending on whether possible subsequent matches are desired.
     */
-    //lines = lines.map(line => {
-    //    let regex2 = /(.*,.*)/;
-    //    return line.match(/^[^,]*/)[0];
-    //});
+    // lines = lines.map(line => {
+    //     let regex2 = /(.*,.*)/;
+    //     return line.match(/^[^,]*/)[0];
+    // });
     return lines;
 }
 

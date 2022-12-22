@@ -1,27 +1,42 @@
 import {useState} from 'react';
 import { useEffect } from 'react';
-import { redirect } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import Header from '../components/Header/Header';
+import CalendarList from '../components/Calendar/CalendarList';
+import SubjectList from '../components/Subjects/SubjectList';
+import '../index.css';
 
 const Dashboard = () => {
-  const [user, setUser] = useState({});
-  const [calendars, setCalendars] = useState([]);
-  const [subjects, setSubjects] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [isError, setIsError] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const navigate = useNavigate();
+  const user = JSON.parse(localStorage.getItem('user'));
 
   useEffect(() => {
-    const user = JSON.parse(localStorage.getItem('user'));
+    setLoading(true);
     if (!user) {
-      redirect('/login');
+      navigate('/login');
     }
-    else {
-      setUser(user);
-    }
-  },[]);
+    setLoading(false);
+  }, []);
+
+  if (loading) {
+    return (
+      <h3>loading...</h3>
+    )
+  }
 
   return(
-    <>
-      <h1>Hello {user.email}</h1>
-    </>
-  )
+    <section className="dashboard">
+      <Header user={user}></Header>
+      <div className="container">
+        <CalendarList></CalendarList>
+        <SubjectList></SubjectList>
+      </div>
+    </section>
+    )
 }
 
 export default Dashboard;

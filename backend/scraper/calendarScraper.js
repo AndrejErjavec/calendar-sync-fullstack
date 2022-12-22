@@ -132,5 +132,5 @@ const saveTxt = (text) => {
 
 module.exports = {
   getIcal,
-  getSubjectsFromICal
+  getSubjectsFromICal,
 }

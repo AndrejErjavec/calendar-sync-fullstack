@@ -1,12 +1,14 @@
 import {useState} from 'react';
-import { redirect } from 'react-router-dom';
 import authService from '../features/authService';
+import {useNavigate} from 'react-router-dom';
 
 const Login = () => {
   const [formData, setFormData] = useState({
     email: '',
     password: ''
   });
+
+  const navigate = useNavigate();
 
   const {email, password} = formData;
 
@@ -21,8 +23,7 @@ const Login = () => {
     e.preventDefault();
     try {
       const response = await authService.login(formData);
-      console.log(response);
-      redirect('/dashboard');
+      navigate('/dashboard');
     }
     catch (err){
       console.log(err);
@@ -50,7 +51,7 @@ const Login = () => {
         placeholder="password"
         onChange={handleChange}/>
       </div>
-      <button type="submit">Register</button>
+      <button type="submit">Login</button>
     </form>
     </>
   )

@@ -19,6 +19,7 @@ const getSubjects = async () => {
 
 const getUserSubjects = async () => {
     const response = await axios.get(CALENDAR_URL + '/subjects');
+    return response.data;
 }
 
 const addCalendar = async (url) => {
@@ -38,9 +39,10 @@ const deleteCalendar = async (url) => {
 
 const deleteSubject = async (subject) => {
     const response = await axios.delete(`${CALENDAR_URL}/subjects/${subject}`);
+    return response.data;
 }
 
-msoule.exports = {
+const calendarService = {
     getIcal,
     getCalendarUrls,
     getSubjects,
@@ -50,3 +52,5 @@ msoule.exports = {
     deleteCalendar,
     deleteSubject
 }
+
+export default calendarService;
